@@ -34,9 +34,11 @@ async function fetchCloud() {
     // 先读本地缓存
     var cached = localStorage.getItem('cloud_cache');
     if (cached) { try { cloudCache = JSON.parse(cached); } catch(e) {} }
-    // 从GitHub API读最新（国内可访问，支持CORS）
+    // 从GitHub API读最新（带Token避免限流）
+    var apiHeaders = { 'Accept': 'application/vnd.github.v3+json' };
+    if (GITHUB_TOKEN) apiHeaders['Authorization'] = 'token ' + GITHUB_TOKEN;
     try {
-        var r = await fetch(REPO_API, { headers: { 'Accept': 'application/vnd.github.v3+json' }, cache: 'no-store' });
+        var r = await fetch(REPO_API, { headers: apiHeaders, cache: 'no-store' });
         if (r.ok) {
             var d = await r.json();
             cloudCache = JSON.parse(decodeURIComponent(escape(atob(d.content))));

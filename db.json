@@ -73,14 +73,6 @@
       "desc": "冰冰凉凉，超级解暑"
     },
     {
-      "id": 10,
-      "name": "做一顿饭",
-      "category": "activity",
-      "price": "夸我漂亮",
-      "emoji": "🍳",
-      "desc": "给你做顿好吃的！"
-    },
-    {
       "id": 11,
       "name": "晚安故事",
       "category": "love",

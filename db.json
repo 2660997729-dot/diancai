@@ -65,14 +65,6 @@
       "desc": "窝在沙发一起看剧~"
     },
     {
-      "id": 9,
-      "name": "随机奶茶",
-      "category": "drink",
-      "price": "说爱我",
-      "emoji": "🥭",
-      "desc": "冰冰凉凉，超级解暑"
-    },
-    {
       "id": 12,
       "name": "巧克力",
       "category": "food",

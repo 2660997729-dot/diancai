@@ -338,6 +338,23 @@
       "_firestoreId": "od_1780575896230",
       "time": "2026-06-04T12:24:56.230Z",
       "timeDisplay": "2026/6/4 20:24:56"
+    },
+    {
+      "items": [
+        {
+          "productId": 4,
+          "name": "打视频电话",
+          "price": "免费",
+          "emoji": "📹",
+          "qty": 1
+        }
+      ],
+      "note": "",
+      "status": "pending",
+      "id": "od_1780577941778",
+      "_firestoreId": "od_1780577941778",
+      "time": "2026-06-04T12:59:01.778Z",
+      "timeDisplay": "2026/6/4 20:59:01"
     }
   ],
   "tk1": "ghp_cwNvByD8dfoktJej",

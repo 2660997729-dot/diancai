@@ -1,5 +1,6 @@
 /**
- * 数据层 - 商品和订单的增删改查，使用localStorage存储
+ * 数据层 - Firebase Firestore 云同步版
+ * 女友下单 → 云数据库 → 男友秒收！
  */
 
 // ========== 默认商品数据 ==========
@@ -27,80 +28,158 @@ const CATEGORIES = {
     love: { name: '恋爱互动', icon: '💕' },
 };
 
-// ========== 产品CRUD ==========
-function getProducts() {
-    const data = localStorage.getItem('menu_products');
-    if (!data) {
-        saveProducts(DEFAULT_PRODUCTS);
-        return JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+// ========== Firebase 初始化 ==========
+let db = null;
+let firebaseReady = false;
+
+function initFirebase() {
+    try {
+        firebase.initializeApp(FIREBASE_CONFIG);
+        db = firebase.firestore();
+        db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+        firebaseReady = true;
+        console.log('✅ Firebase 云同步已连接');
+    } catch (e) {
+        console.warn('Firebase 连接失败，使用本地存储:', e.message);
+        firebaseReady = false;
     }
-    return JSON.parse(data);
 }
 
-function saveProducts(products) {
-    localStorage.setItem('menu_products', JSON.stringify(products));
+async function initDefaultProducts() {
+    if (!firebaseReady) return;
+    try {
+        const snapshot = await db.collection('products').limit(1).get();
+        if (snapshot.empty) {
+            const batch = db.batch();
+            DEFAULT_PRODUCTS.forEach(p => {
+                const ref = db.collection('products').doc(String(p.id));
+                batch.set(ref, p);
+            });
+            await batch.commit();
+            console.log('✅ 默认商品已写入云端');
+        }
+    } catch (e) { console.warn('初始化商品失败:', e.message); }
 }
 
-function addProduct(product) {
-    const products = getProducts();
-    const newId = products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1;
-    product.id = newId;
-    products.push(product);
-    saveProducts(products);
+// ========== 产品CRUD ==========
+async function getProducts() {
+    if (!firebaseReady) {
+        const d = localStorage.getItem('menu_products');
+        return d ? JSON.parse(d) : DEFAULT_PRODUCTS;
+    }
+    try {
+        const snapshot = await db.collection('products').orderBy('id').get();
+        const products = [];
+        snapshot.forEach(doc => products.push(doc.data()));
+        return products.length > 0 ? products : DEFAULT_PRODUCTS;
+    } catch (e) { return DEFAULT_PRODUCTS; }
+}
+
+async function addProduct(product) {
+    if (!firebaseReady) {
+        const ps = JSON.parse(localStorage.getItem('menu_products') || '[]');
+        product.id = ps.length > 0 ? Math.max(...ps.map(p => p.id)) + 1 : 1;
+        ps.push(product);
+        localStorage.setItem('menu_products', JSON.stringify(ps));
+        return product;
+    }
+    const snapshot = await db.collection('products').orderBy('id', 'desc').limit(1).get();
+    product.id = snapshot.empty ? 1 : snapshot.docs[0].data().id + 1;
+    await db.collection('products').doc(String(product.id)).set(product);
     return product;
 }
 
-function updateProduct(id, updates) {
-    const products = getProducts();
-    const index = products.findIndex(p => p.id === id);
-    if (index !== -1) {
-        products[index] = { ...products[index], ...updates };
-        saveProducts(products);
+async function updateProduct(id, updates) {
+    if (!firebaseReady) {
+        const ps = JSON.parse(localStorage.getItem('menu_products') || '[]');
+        const i = ps.findIndex(p => p.id === id);
+        if (i !== -1) { ps[i] = { ...ps[i], ...updates }; localStorage.setItem('menu_products', JSON.stringify(ps)); }
+        return;
     }
+    await db.collection('products').doc(String(id)).update(updates);
 }
 
-function deleteProduct(id) {
-    let products = getProducts();
-    products = products.filter(p => p.id !== id);
-    saveProducts(products);
+async function deleteProduct(id) {
+    if (!firebaseReady) {
+        const ps = JSON.parse(localStorage.getItem('menu_products') || '[]').filter(p => p.id !== id);
+        localStorage.setItem('menu_products', JSON.stringify(ps));
+        return;
+    }
+    await db.collection('products').doc(String(id)).delete();
 }
 
 // ========== 订单CRUD ==========
-function getOrders() {
-    const data = localStorage.getItem('menu_orders');
-    return data ? JSON.parse(data) : [];
+async function getOrders() {
+    if (!firebaseReady) {
+        const d = localStorage.getItem('menu_orders');
+        return d ? JSON.parse(d) : [];
+    }
+    try {
+        const snapshot = await db.collection('orders').orderBy('time', 'desc').get();
+        const orders = [];
+        snapshot.forEach(doc => orders.push({ _firestoreId: doc.id, ...doc.data() }));
+        return orders;
+    } catch (e) { return []; }
 }
 
-function saveOrders(orders) {
-    localStorage.setItem('menu_orders', JSON.stringify(orders));
-}
+async function addOrder(order) {
+    order.status = 'pending';
+    order.time = new Date().toISOString();
+    order.timeDisplay = new Date().toLocaleString('zh-CN');
 
-function addOrder(order) {
-    const orders = getOrders();
-    const newId = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
-    order.id = newId;
-    order.status = 'pending'; // pending | done
-    order.time = new Date().toLocaleString('zh-CN');
-    orders.unshift(order);
-    saveOrders(orders);
+    if (!firebaseReady) {
+        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
+        order.id = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
+        orders.unshift(order);
+        localStorage.setItem('menu_orders', JSON.stringify(orders));
+        return order;
+    }
+    const docRef = await db.collection('orders').add(order);
+    order._firestoreId = docRef.id;
     return order;
 }
 
-function markOrderDone(id) {
-    const orders = getOrders();
-    const order = orders.find(o => o.id === id);
-    if (order) {
-        order.status = 'done';
-        saveOrders(orders);
+async function markOrderDone(firestoreId) {
+    if (!firebaseReady) {
+        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
+        const o = orders.find(x => x.id == firestoreId || x._firestoreId === firestoreId);
+        if (o) { o.status = 'done'; localStorage.setItem('menu_orders', JSON.stringify(orders)); }
+        return;
     }
+    await db.collection('orders').doc(firestoreId).update({ status: 'done' });
 }
 
-function deleteOrder(id) {
-    let orders = getOrders();
-    orders = orders.filter(o => o.id !== id);
-    saveOrders(orders);
+async function deleteOrder(firestoreId) {
+    if (!firebaseReady) {
+        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]')
+            .filter(x => x.id != firestoreId && x._firestoreId !== firestoreId);
+        localStorage.setItem('menu_orders', JSON.stringify(orders));
+        return;
+    }
+    await db.collection('orders').doc(firestoreId).delete();
 }
 
-function getPendingCount() {
-    return getOrders().filter(o => o.status === 'pending').length;
+async function getPendingCount() {
+    if (!firebaseReady) {
+        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
+        return orders.filter(o => o.status === 'pending').length;
+    }
+    try {
+        const snapshot = await db.collection('orders').where('status', '==', 'pending').get();
+        return snapshot.size;
+    } catch (e) { return 0; }
 }
+
+// 实时监听订单变化（后台用）
+function onOrdersSnapshot(callback) {
+    if (!firebaseReady) return () => {};
+    return db.collection('orders').orderBy('time', 'desc')
+        .onSnapshot(snapshot => {
+            const orders = [];
+            snapshot.forEach(doc => orders.push({ _firestoreId: doc.id, ...doc.data() }));
+            callback(orders);
+        }, err => console.warn('订单监听出错:', err.message));
+}
+
+// 初始化
+initFirebase();

@@ -6,9 +6,10 @@ let currentCategory = 'all';
 let cart = [];
 
 // ========== 初始化 ==========
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     loadCartFromStorage();
     renderCategories();
+    await initDefaultProducts();
     renderProducts();
 });
 
@@ -29,8 +30,8 @@ function switchCategory(cat) {
 }
 
 // ========== 商品渲染 ==========
-function renderProducts() {
-    const products = getProducts();
+async function renderProducts() {
+    const products = await getProducts();
     const filtered = currentCategory === 'all'
         ? products
         : products.filter(p => p.category === currentCategory);
@@ -56,8 +57,8 @@ function renderProducts() {
 }
 
 // ========== 购物车操作 ==========
-function addToCart(productId) {
-    const products = getProducts();
+async function addToCart(productId) {
+    const products = await getProducts();
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
@@ -145,7 +146,7 @@ function updateCartUI() {
 }
 
 // ========== 下单 ==========
-function submitOrder() {
+async function submitOrder() {
     if (cart.length === 0) {
         showToast('购物车还是空的哦~', 'error');
         return;
@@ -158,7 +159,7 @@ function submitOrder() {
         note: note
     };
 
-    addOrder(order);
+    await addOrder(order);
 
     // 显示成功动画
     showSuccessAnimation(() => {

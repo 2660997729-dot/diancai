@@ -1,14 +1,17 @@
 /**
- * 后台管理页逻辑 - 订单管理 & 商品管理
+ * 后台管理页逻辑 - 订单管理 & 商品管理（实时云同步版）
  */
 
 let currentTab = 'orders';
 let orderFilter = 'all';
 let editingProductId = null;
+let unsubscribeOrders = null;
 
 // ========== 初始化 ==========
-document.addEventListener('DOMContentLoaded', () => {
-    renderOrders();
+document.addEventListener('DOMContentLoaded', async () => {
+    await initDefaultProducts();
+    // 开启实时订单监听
+    startOrdersListener();
     renderProductsAdmin();
     updateOrderBadge();
 });
@@ -26,13 +29,35 @@ function switchTab(tab) {
     if (tab === 'products') renderProductsAdmin();
 }
 
-// ========== 订单管理 ==========
-function renderOrders() {
-    const orders = getOrders();
+// 实时监听订单（女友下单，你秒收！）
+function startOrdersListener() {
+    unsubscribeOrders = onOrdersSnapshot(orders => {
+        renderOrdersFromData(orders);
+        updateOrderBadge();
+    });
+}
+
+function renderOrdersFromData(orders) {
     const filtered = orderFilter === 'all'
         ? orders
         : orders.filter(o => o.status === orderFilter);
+    renderOrderCards(filtered);
+}
 
+function renderOrders() {
+    if (firebaseReady && unsubscribeOrders) {
+        // 实时模式：数据由监听器自动更新，这里只需重新筛选
+        getOrders().then(orders => {
+            renderOrdersFromData(orders);
+        });
+    } else {
+        getOrders().then(orders => {
+            renderOrderCards(orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter));
+        });
+    }
+}
+
+function renderOrderCards(filtered) {
     const container = document.getElementById('ordersList');
 
     if (filtered.length === 0) {
@@ -43,7 +68,7 @@ function renderOrders() {
     container.innerHTML = filtered.map(order => `
         <div class="order-card ${order.status}">
             <div class="order-card-header">
-                <span class="order-time">🕐 ${order.time}</span>
+                <span class="order-time">🕐 ${order.timeDisplay || ''}</span>
                 <span class="order-status ${order.status}">${order.status === 'pending' ? '⏳ 待处理' : '✅ 已完成'}</span>
             </div>
             <div class="order-items">
@@ -54,11 +79,11 @@ function renderOrders() {
             ${order.note ? `<div class="order-note">💬 "${order.note}"</div>` : ''}
             <div class="order-actions">
                 ${order.status === 'pending' ? `
-                    <button class="btn-sm btn-done" onclick="doneOrder(${order.id})">
+                    <button class="btn-sm btn-done" onclick="doneOrder('${order._firestoreId}')">
                         <i class="fas fa-check"></i> 标记完成
                     </button>
                 ` : ''}
-                <button class="btn-sm btn-delete" onclick="removeOrder(${order.id})">
+                <button class="btn-sm btn-delete" onclick="removeOrder('${order._firestoreId}')">
                     <i class="fas fa-trash"></i> 删除
                 </button>
             </div>
@@ -73,24 +98,24 @@ function filterOrders(filter) {
     renderOrders();
 }
 
-function doneOrder(id) {
-    markOrderDone(id);
+async function doneOrder(id) {
+    await markOrderDone(id);
     renderOrders();
     updateOrderBadge();
     showToast('已标记为完成 ✅', 'success');
 }
 
-function removeOrder(id) {
+async function removeOrder(id) {
     if (confirm('确定要删除这个订单吗？')) {
-        deleteOrder(id);
+        await deleteOrder(id);
         renderOrders();
         updateOrderBadge();
         showToast('订单已删除', 'success');
     }
 }
 
-function updateOrderBadge() {
-    const count = getPendingCount();
+async function updateOrderBadge() {
+    const count = await getPendingCount();
     const badge = document.getElementById('orderBadge');
     if (badge) {
         badge.textContent = count;
@@ -99,8 +124,8 @@ function updateOrderBadge() {
 }
 
 // ========== 商品管理 ==========
-function renderProductsAdmin() {
-    const products = getProducts();
+async function renderProductsAdmin() {
+    const products = await getProducts();
     const container = document.getElementById('productsAdminList');
 
     container.innerHTML = products.map(p => `
@@ -134,8 +159,8 @@ function showAddProduct() {
     document.getElementById('productModal').classList.add('show');
 }
 
-function editProduct(id) {
-    const products = getProducts();
+async function editProduct(id) {
+    const products = await getProducts();
     const product = products.find(p => p.id === id);
     if (!product) return;
 
@@ -184,10 +209,10 @@ function saveProduct() {
     const id = document.getElementById('editProductId').value;
 
     if (id) {
-        updateProduct(parseInt(id), { name, category, price, emoji, desc });
+        await updateProduct(parseInt(id), { name, category, price, emoji, desc });
         showToast('商品已更新 ✅', 'success');
     } else {
-        addProduct({ name, category, price, emoji, desc });
+        await addProduct({ name, category, price, emoji, desc });
         showToast('商品已添加 🎉', 'success');
     }
 
@@ -195,9 +220,9 @@ function saveProduct() {
     renderProductsAdmin();
 }
 
-function removeProduct(id) {
+async function removeProduct(id) {
     if (confirm('确定要删除这个商品吗？')) {
-        deleteProduct(id);
+        await deleteProduct(id);
         renderProductsAdmin();
         showToast('商品已删除', 'success');
     }

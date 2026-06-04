@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 后台管理 - 点单小铺</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <header class="header admin-header">
+        <div class="header-content">
+            <h1 class="logo">🔧 后台管理</h1>
+            <div class="header-actions">
+                <a href="index.html" class="btn-outline" target="_blank">👁️ 预览店铺</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="admin-container">
+        <!-- Tab切换 -->
+        <div class="admin-tabs">
+            <button class="tab-btn active" onclick="switchTab('orders')">
+                <i class="fas fa-list-check"></i> 订单管理
+                <span class="tab-badge" id="orderBadge">0</span>
+            </button>
+            <button class="tab-btn" onclick="switchTab('products')">
+                <i class="fas fa-boxes"></i> 商品管理
+            </button>
+        </div>
+
+        <!-- 订单管理面板 -->
+        <div class="tab-panel active" id="ordersPanel">
+            <div class="panel-header">
+                <h2>📋 收到的订单</h2>
+                <div class="filter-btns">
+                    <button class="filter-btn active" onclick="filterOrders('all')">全部</button>
+                    <button class="filter-btn" onclick="filterOrders('pending')">待处理</button>
+                    <button class="filter-btn" onclick="filterOrders('done')">已完成</button>
+                </div>
+            </div>
+            <div class="orders-list" id="ordersList">
+                <p class="empty-state">暂无订单~</p>
+            </div>
+        </div>
+
+        <!-- 商品管理面板 -->
+        <div class="tab-panel" id="productsPanel">
+            <div class="panel-header">
+                <h2>📦 商品管理</h2>
+                <button class="btn-primary" onclick="showAddProduct()">
+                    <i class="fas fa-plus"></i> 添加商品
+                </button>
+            </div>
+            <div class="products-admin-list" id="productsAdminList">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 商品编辑弹窗 -->
+    <div class="modal-overlay" id="productModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">添加商品</h3>
+                <button class="btn-close" onclick="closeProductModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editProductId">
+                <label>商品名称</label>
+                <input type="text" id="productName" placeholder="如：冰淇淋🍦">
+                <label>分类</label>
+                <select id="productCategory">
+                    <option value="food">🍔 好吃的</option>
+                    <option value="drink">🥤 好喝的</option>
+                    <option value="activity">🎯 想做的事</option>
+                    <option value="love">💕 恋爱互动</option>
+                </select>
+                <label>价格（或描述）</label>
+                <input type="text" id="productPrice" placeholder="如：免费 / ¥15 / 一个抱抱">
+                <label>Emoji图标</label>
+                <input type="text" id="productEmoji" placeholder="如：🍦" maxlength="2">
+                <label>描述</label>
+                <textarea id="productDesc" rows="2" placeholder="简单描述一下这个商品~"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" onclick="closeProductModal()">取消</button>
+                <button class="btn-primary" id="btnSaveProduct" onclick="saveProduct()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="js/data.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

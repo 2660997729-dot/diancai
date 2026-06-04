@@ -1,10 +1,14 @@
 /**
- * 数据层 - Firebase Firestore 云同步版
- * 女友下单 → 云数据库 → 男友秒收！
+ * 数据层 - JSONBlob 云同步版（国内可访问！）
+ * 女友下单 → 云端 → 男友秒收！
  */
 
-// ========== 默认商品数据 ==========
-const DEFAULT_PRODUCTS = [
+// ========== 云存储配置 ==========
+var BLOB_ID = '019e9191-5181-7b4a-8247-b559e66b9f36';
+var API_BASE = 'https://jsonblob.com/api/jsonBlob/' + BLOB_ID;
+
+// ========== 默认商品 ==========
+var DEFAULT_PRODUCTS = [
     { id: 1, name: '冰淇淋', category: 'food', price: '一个抱抱', emoji: '🍦', desc: '夏天到了，来个冰淇淋吧~' },
     { id: 2, name: '珍珠奶茶', category: 'drink', price: '亲一口', emoji: '🧋', desc: '少糖去冰，加珍珠！' },
     { id: 3, name: '草莓蛋糕', category: 'food', price: '陪我看电影', emoji: '🍰', desc: '甜甜的草莓蛋糕，心情美美哒' },
@@ -19,8 +23,7 @@ const DEFAULT_PRODUCTS = [
     { id: 12, name: '巧克力', category: 'food', price: '一个亲亲', emoji: '🍫', desc: '心情不好就要吃巧克力' },
 ];
 
-// ========== 分类配置 ==========
-const CATEGORIES = {
+var CATEGORIES = {
     all: { name: '全部', icon: '🌟' },
     food: { name: '好吃的', icon: '🍔' },
     drink: { name: '好喝的', icon: '🥤' },
@@ -28,173 +31,120 @@ const CATEGORIES = {
     love: { name: '恋爱互动', icon: '💕' },
 };
 
-// ========== Firebase 初始化 ==========
-let db = null;
-let firebaseReady = false;
-let firestoreWorking = true; // 跟踪 Firestore 是否可用
+// ========== 云端缓存 ==========
+var cloudCache = null;
+var lastFetch = 0;
 
-function initFirebase() {
+async function fetchCloud() {
+    var now = Date.now();
+    if (cloudCache && (now - lastFetch < 2000)) return cloudCache;
     try {
-        firebase.initializeApp(FIREBASE_CONFIG);
-        db = firebase.firestore();
-        db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-        firebaseReady = true;
-        console.log('✅ Firebase 云同步已连接');
-    } catch (e) {
-        console.warn('Firebase 连接失败，使用本地存储:', e.message);
-        firebaseReady = false;
-    }
+        var r = await fetch(API_BASE, { headers: { 'Accept': 'application/json' } });
+        if (r.ok) { cloudCache = await r.json(); lastFetch = now; return cloudCache; }
+    } catch (e) { console.warn('云端读取失败:', e.message); }
+    return null;
 }
 
-// 安全执行 Firestore 操作，失败时降级到 localStorage
-async function safeFirestore(operation, fallback) {
-    if (!firebaseReady || !firestoreWorking) return fallback();
+async function saveCloud(data) {
     try {
-        return await operation();
-    } catch (e) {
-        console.warn('Firestore 操作失败，切换到本地存储:', e.message);
-        firestoreWorking = false;
-        return fallback();
-    }
+        var r = await fetch(API_BASE, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (r.ok) { cloudCache = data; lastFetch = Date.now(); return true; }
+    } catch (e) { console.warn('云端保存失败:', e.message); }
+    return false;
 }
 
-async function initDefaultProducts() {
-    if (!firebaseReady) return;
-    try {
-        const snapshot = await db.collection('products').limit(1).get();
-        if (snapshot.empty) {
-            const batch = db.batch();
-            DEFAULT_PRODUCTS.forEach(p => {
-                const ref = db.collection('products').doc(String(p.id));
-                batch.set(ref, p);
-            });
-            await batch.commit();
-            console.log('✅ 默认商品已写入云端');
-        }
-    } catch (e) { console.warn('初始化商品失败:', e.message); }
-}
-
-// ========== 产品CRUD ==========
+// ========== 产品 ==========
 async function getProducts() {
-    if (!firebaseReady) {
-        const d = localStorage.getItem('menu_products');
-        return d ? JSON.parse(d) : DEFAULT_PRODUCTS;
-    }
-    try {
-        const snapshot = await db.collection('products').orderBy('id').get();
-        const products = [];
-        snapshot.forEach(doc => products.push(doc.data()));
-        return products.length > 0 ? products : DEFAULT_PRODUCTS;
-    } catch (e) { return DEFAULT_PRODUCTS; }
+    var c = await fetchCloud();
+    if (c && c.products && c.products.length > 0) return c.products;
+    var l = localStorage.getItem('menu_products');
+    return l ? JSON.parse(l) : DEFAULT_PRODUCTS;
 }
 
-async function addProduct(product) {
-    if (!firebaseReady) {
-        const ps = JSON.parse(localStorage.getItem('menu_products') || '[]');
-        product.id = ps.length > 0 ? Math.max(...ps.map(p => p.id)) + 1 : 1;
-        ps.push(product);
-        localStorage.setItem('menu_products', JSON.stringify(ps));
-        return product;
-    }
-    const snapshot = await db.collection('products').orderBy('id', 'desc').limit(1).get();
-    product.id = snapshot.empty ? 1 : snapshot.docs[0].data().id + 1;
-    await db.collection('products').doc(String(product.id)).set(product);
-    return product;
+async function addProduct(p) {
+    var ps = await getProducts();
+    p.id = ps.length > 0 ? Math.max.apply(null, ps.map(function(x) { return x.id; })) + 1 : 1;
+    ps.push(p);
+    localStorage.setItem('menu_products', JSON.stringify(ps));
+    var c = await fetchCloud() || {};
+    c.products = ps;
+    await saveCloud(c);
+    return p;
 }
 
-async function updateProduct(id, updates) {
-    if (!firebaseReady) {
-        const ps = JSON.parse(localStorage.getItem('menu_products') || '[]');
-        const i = ps.findIndex(p => p.id === id);
-        if (i !== -1) { ps[i] = { ...ps[i], ...updates }; localStorage.setItem('menu_products', JSON.stringify(ps)); }
-        return;
-    }
-    await db.collection('products').doc(String(id)).update(updates);
+async function updateProduct(id, u) {
+    var ps = await getProducts();
+    var i = ps.findIndex(function(x) { return x.id === id; });
+    if (i >= 0) { ps[i] = Object.assign({}, ps[i], u); localStorage.setItem('menu_products', JSON.stringify(ps)); }
+    var c = await fetchCloud() || {};
+    c.products = ps;
+    await saveCloud(c);
 }
 
 async function deleteProduct(id) {
-    if (!firebaseReady) {
-        const ps = JSON.parse(localStorage.getItem('menu_products') || '[]').filter(p => p.id !== id);
-        localStorage.setItem('menu_products', JSON.stringify(ps));
-        return;
-    }
-    await db.collection('products').doc(String(id)).delete();
+    var ps = (await getProducts()).filter(function(x) { return x.id !== id; });
+    localStorage.setItem('menu_products', JSON.stringify(ps));
+    var c = await fetchCloud() || {};
+    c.products = ps;
+    await saveCloud(c);
 }
 
-// ========== 订单CRUD ==========
-async function getOrders() {
-    if (!firebaseReady) {
-        const d = localStorage.getItem('menu_orders');
-        return d ? JSON.parse(d) : [];
+async function initDefaultProducts() {
+    var c = await fetchCloud();
+    if (!c || !c.products || c.products.length === 0) {
+        await saveCloud({ products: DEFAULT_PRODUCTS, orders: [] });
+        console.log('✅ 默认商品已写入云端');
     }
-    try {
-        const snapshot = await db.collection('orders').orderBy('time', 'desc').get();
-        const orders = [];
-        snapshot.forEach(doc => orders.push({ _firestoreId: doc.id, ...doc.data() }));
-        return orders;
-    } catch (e) { return []; }
+}
+
+// ========== 订单 ==========
+async function getOrders() {
+    var c = await fetchCloud();
+    if (c && c.orders) return c.orders.slice().reverse();
+    var l = localStorage.getItem('menu_orders');
+    return l ? JSON.parse(l) : [];
 }
 
 async function addOrder(order) {
     order.status = 'pending';
+    order.id = 'od_' + Date.now();
+    order._firestoreId = order.id;
     order.time = new Date().toISOString();
     order.timeDisplay = new Date().toLocaleString('zh-CN');
-
-    return safeFirestore(async () => {
-        const docRef = await db.collection('orders').add(order);
-        order._firestoreId = docRef.id;
-        return order;
-    }, () => {
-        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
-        order.id = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
-        order._firestoreId = 'local_' + order.id;
-        orders.unshift(order);
-        localStorage.setItem('menu_orders', JSON.stringify(orders));
-        return order;
-    });
+    var c = await fetchCloud() || {};
+    c.orders = c.orders || [];
+    c.orders.push(order);
+    var ok = await saveCloud(c);
+    if (!ok) { var lo = JSON.parse(localStorage.getItem('menu_orders') || '[]'); lo.unshift(order); localStorage.setItem('menu_orders', JSON.stringify(lo)); }
+    return order;
 }
 
-async function markOrderDone(firestoreId) {
-    if (!firebaseReady) {
-        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
-        const o = orders.find(x => x.id == firestoreId || x._firestoreId === firestoreId);
-        if (o) { o.status = 'done'; localStorage.setItem('menu_orders', JSON.stringify(orders)); }
-        return;
-    }
-    await db.collection('orders').doc(firestoreId).update({ status: 'done' });
+async function markOrderDone(id) {
+    var c = await fetchCloud();
+    if (c && c.orders) { var o = c.orders.find(function(x) { return x.id === id || x._firestoreId === id; }); if (o) { o.status = 'done'; await saveCloud(c); return; } }
+    var lo = JSON.parse(localStorage.getItem('menu_orders') || '[]');
+    var o = lo.find(function(x) { return x.id === id || x._firestoreId === id; });
+    if (o) { o.status = 'done'; localStorage.setItem('menu_orders', JSON.stringify(lo)); }
 }
 
-async function deleteOrder(firestoreId) {
-    if (!firebaseReady) {
-        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]')
-            .filter(x => x.id != firestoreId && x._firestoreId !== firestoreId);
-        localStorage.setItem('menu_orders', JSON.stringify(orders));
-        return;
-    }
-    await db.collection('orders').doc(firestoreId).delete();
+async function deleteOrder(id) {
+    var c = await fetchCloud();
+    if (c && c.orders) { c.orders = c.orders.filter(function(x) { return x.id !== id && x._firestoreId !== id; }); await saveCloud(c); }
+    var lo = JSON.parse(localStorage.getItem('menu_orders') || '[]').filter(function(x) { return x.id !== id && x._firestoreId !== id; });
+    localStorage.setItem('menu_orders', JSON.stringify(lo));
 }
 
 async function getPendingCount() {
-    if (!firebaseReady) {
-        const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
-        return orders.filter(o => o.status === 'pending').length;
-    }
-    try {
-        const snapshot = await db.collection('orders').where('status', '==', 'pending').get();
-        return snapshot.size;
-    } catch (e) { return 0; }
+    var os = await getOrders();
+    var n = 0;
+    os.forEach(function(o) { if (o.status === 'pending') n++; });
+    return n;
 }
 
-// 实时监听订单变化（后台用）
-function onOrdersSnapshot(callback) {
-    if (!firebaseReady) return () => {};
-    return db.collection('orders').orderBy('time', 'desc')
-        .onSnapshot(snapshot => {
-            const orders = [];
-            snapshot.forEach(doc => orders.push({ _firestoreId: doc.id, ...doc.data() }));
-            callback(orders);
-        }, err => console.warn('订单监听出错:', err.message));
+function onOrdersSnapshot(cb) {
+    var t = setInterval(async function() { var os = await getOrders(); cb(os); }, 3000);
+    return function() { clearInterval(t); };
 }
 
-// 初始化
-initFirebase();
+// 启动
+initDefaultProducts();

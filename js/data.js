@@ -31,6 +31,7 @@ const CATEGORIES = {
 // ========== Firebase 初始化 ==========
 let db = null;
 let firebaseReady = false;
+let firestoreWorking = true; // 跟踪 Firestore 是否可用
 
 function initFirebase() {
     try {
@@ -42,6 +43,18 @@ function initFirebase() {
     } catch (e) {
         console.warn('Firebase 连接失败，使用本地存储:', e.message);
         firebaseReady = false;
+    }
+}
+
+// 安全执行 Firestore 操作，失败时降级到 localStorage
+async function safeFirestore(operation, fallback) {
+    if (!firebaseReady || !firestoreWorking) return fallback();
+    try {
+        return await operation();
+    } catch (e) {
+        console.warn('Firestore 操作失败，切换到本地存储:', e.message);
+        firestoreWorking = false;
+        return fallback();
     }
 }
 
@@ -127,16 +140,18 @@ async function addOrder(order) {
     order.time = new Date().toISOString();
     order.timeDisplay = new Date().toLocaleString('zh-CN');
 
-    if (!firebaseReady) {
+    return safeFirestore(async () => {
+        const docRef = await db.collection('orders').add(order);
+        order._firestoreId = docRef.id;
+        return order;
+    }, () => {
         const orders = JSON.parse(localStorage.getItem('menu_orders') || '[]');
         order.id = orders.length > 0 ? Math.max(...orders.map(o => o.id)) + 1 : 1;
+        order._firestoreId = 'local_' + order.id;
         orders.unshift(order);
         localStorage.setItem('menu_orders', JSON.stringify(orders));
         return order;
-    }
-    const docRef = await db.collection('orders').add(order);
-    order._firestoreId = docRef.id;
-    return order;
+    });
 }
 
 async function markOrderDone(firestoreId) {

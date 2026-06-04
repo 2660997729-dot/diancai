@@ -227,7 +227,7 @@
         }
       ],
       "note": "GitHub端全链路测试 17:40:35",
-      "status": "done",
+      "status": "pending",
       "id": "od_1780566035415",
       "_firestoreId": "od_1780566035415",
       "time": "2026-06-04T09:40:35.415Z",
@@ -251,7 +251,7 @@
         }
       ],
       "note": "跨域同步终测-Surge端",
-      "status": "done",
+      "status": "pending",
       "id": "od_1780566218688",
       "_firestoreId": "od_1780566218688",
       "time": "2026-06-04T09:43:38.688Z",
@@ -268,7 +268,7 @@
         }
       ],
       "note": "",
-      "status": "done",
+      "status": "pending",
       "id": "od_1780575692856",
       "_firestoreId": "od_1780575692856",
       "time": "2026-06-04T12:21:32.856Z",
@@ -299,7 +299,7 @@
         }
       ],
       "note": "",
-      "status": "done",
+      "status": "pending",
       "id": "od_1780575727333",
       "_firestoreId": "od_1780575727333",
       "time": "2026-06-04T12:22:07.333Z",
@@ -308,26 +308,36 @@
     {
       "items": [
         {
-          "productId": 5,
-          "name": "一起散步",
-          "price": "30分钟",
-          "emoji": "🚶",
-          "qty": 1
-        },
-        {
-          "productId": 12,
-          "name": "巧克力",
-          "price": "一个亲亲",
-          "emoji": "🍫",
+          "productId": 8,
+          "name": "一起追剧",
+          "price": "2小时",
+          "emoji": "📺",
           "qty": 1
         }
       ],
       "note": "",
-      "status": "done",
-      "id": "od_1780575793732",
-      "_firestoreId": "od_1780575793732",
-      "time": "2026-06-04T12:23:13.732Z",
-      "timeDisplay": "2026/6/4 20:23:13"
+      "status": "pending",
+      "id": "od_1780575838518",
+      "_firestoreId": "od_1780575838518",
+      "time": "2026-06-04T12:23:58.518Z",
+      "timeDisplay": "2026/6/4 20:23:58"
+    },
+    {
+      "items": [
+        {
+          "productId": 8,
+          "name": "一起追剧",
+          "price": "2小时",
+          "emoji": "📺",
+          "qty": 4
+        }
+      ],
+      "note": "",
+      "status": "pending",
+      "id": "od_1780575896230",
+      "_firestoreId": "od_1780575896230",
+      "time": "2026-06-04T12:24:56.230Z",
+      "timeDisplay": "2026/6/4 20:24:56"
     }
   ],
   "tk1": "ghp_cwNvByD8dfoktJej",

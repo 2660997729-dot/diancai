@@ -6,6 +6,7 @@
 // ========== 云存储配置 ==========
 var BLOB_ID = '019e9191-5181-7b4a-8247-b559e66b9f36';
 var API_BASE = 'https://jsonblob.com/api/jsonBlob/' + BLOB_ID;
+var CORS_PROXY = 'https://corsproxy.io/?';  // 免费CORS代理，国内可用
 
 // ========== 默认商品 ==========
 var DEFAULT_PRODUCTS = [
@@ -38,18 +39,31 @@ var lastFetch = 0;
 async function fetchCloud() {
     var now = Date.now();
     if (cloudCache && (now - lastFetch < 2000)) return cloudCache;
-    try {
-        var r = await fetch(API_BASE, { headers: { 'Accept': 'application/json' } });
-        if (r.ok) { cloudCache = await r.json(); lastFetch = now; return cloudCache; }
-    } catch (e) { console.warn('云端读取失败:', e.message); }
+    // 先尝试直连，失败后用代理
+    var urls = [API_BASE, CORS_PROXY + encodeURIComponent(API_BASE)];
+    for (var i = 0; i < urls.length; i++) {
+        try {
+            var r = await fetch(urls[i], { headers: { 'Accept': 'application/json' } });
+            if (r.ok) { cloudCache = await r.json(); lastFetch = now; return cloudCache; }
+        } catch (e) {}
+    }
+    console.warn('云端读取失败');
     return null;
 }
 
 async function saveCloud(data) {
+    var body = JSON.stringify(data);
+    // PUT 请求先用直连
     try {
-        var r = await fetch(API_BASE, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        var r = await fetch(API_BASE, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body });
         if (r.ok) { cloudCache = data; lastFetch = Date.now(); return true; }
-    } catch (e) { console.warn('云端保存失败:', e.message); }
+    } catch (e) {}
+    // 直连失败，尝试通过代理
+    try {
+        var r2 = await fetch(CORS_PROXY + encodeURIComponent(API_BASE), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body });
+        if (r2.ok) { cloudCache = data; lastFetch = Date.now(); return true; }
+    } catch (e) {}
+    console.warn('云端保存失败');
     return false;
 }
 

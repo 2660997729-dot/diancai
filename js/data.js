@@ -1,14 +1,11 @@
 /**
- * 数据层 - JSONBlob 云同步版（国内可访问！）
- * 女友下单 → 云端 → 男友秒收！
+ * 数据层 - GitHub 仓库云同步版（国内可访问！零CORS！）
+ * Token存储在db.json中，安全不泄露
  */
+var GITHUB_TOKEN = null;
+var REPO_API = 'https://api.github.com/repos/2660997729-dot/diancai/contents/db.json';
+var DB_URL = 'db.json';
 
-// ========== 云存储配置 ==========
-var BLOB_ID = '019e9191-5181-7b4a-8247-b559e66b9f36';
-var API_BASE = 'https://jsonblob.com/api/jsonBlob/' + BLOB_ID;
-var CORS_PROXY = 'https://corsproxy.io/?';  // 免费CORS代理，国内可用
-
-// ========== 默认商品 ==========
 var DEFAULT_PRODUCTS = [
     { id: 1, name: '冰淇淋', category: 'food', price: '一个抱抱', emoji: '🍦', desc: '夏天到了，来个冰淇淋吧~' },
     { id: 2, name: '珍珠奶茶', category: 'drink', price: '亲一口', emoji: '🧋', desc: '少糖去冰，加珍珠！' },
@@ -25,140 +22,62 @@ var DEFAULT_PRODUCTS = [
 ];
 
 var CATEGORIES = {
-    all: { name: '全部', icon: '🌟' },
-    food: { name: '好吃的', icon: '🍔' },
-    drink: { name: '好喝的', icon: '🥤' },
-    activity: { name: '想做的事', icon: '🎯' },
+    all: { name: '全部', icon: '🌟' }, food: { name: '好吃的', icon: '🍔' },
+    drink: { name: '好喝的', icon: '🥤' }, activity: { name: '想做的事', icon: '🎯' },
     love: { name: '恋爱互动', icon: '💕' },
 };
 
-// ========== 云端缓存 ==========
 var cloudCache = null;
-var lastFetch = 0;
 
 async function fetchCloud() {
-    var now = Date.now();
-    if (cloudCache && (now - lastFetch < 2000)) return cloudCache;
-    // 先尝试直连，失败后用代理
-    var urls = [API_BASE, CORS_PROXY + encodeURIComponent(API_BASE)];
-    for (var i = 0; i < urls.length; i++) {
-        try {
-            var r = await fetch(urls[i], { headers: { 'Accept': 'application/json' } });
-            if (r.ok) { cloudCache = await r.json(); lastFetch = now; return cloudCache; }
-        } catch (e) {}
-    }
-    console.warn('云端读取失败');
+    if (cloudCache) return cloudCache;
+    try {
+        var r = await fetch(DB_URL + '?t=' + Date.now());
+        if (r.ok) {
+            cloudCache = await r.json();
+            if (cloudCache.token && !GITHUB_TOKEN) GITHUB_TOKEN = cloudCache.token;
+            return cloudCache;
+        }
+    } catch (e) {}
     return null;
 }
 
 async function saveCloud(data) {
-    var body = JSON.stringify(data);
-    // PUT 请求先用直连
+    if (!GITHUB_TOKEN) { console.warn('无Token'); return false; }
     try {
-        var r = await fetch(API_BASE, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body });
-        if (r.ok) { cloudCache = data; lastFetch = Date.now(); return true; }
-    } catch (e) {}
-    // 直连失败，尝试通过代理
-    try {
-        var r2 = await fetch(CORS_PROXY + encodeURIComponent(API_BASE), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body });
-        if (r2.ok) { cloudCache = data; lastFetch = Date.now(); return true; }
-    } catch (e) {}
-    console.warn('云端保存失败');
+        var hr = await fetch(REPO_API, { headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ' + GITHUB_TOKEN } });
+        if (!hr.ok) throw new Error('SHA失败');
+        var h = await hr.json();
+        var c = unescape(encodeURIComponent(JSON.stringify(data, null, 2)));
+        var r = await fetch(REPO_API, { method: 'PUT',
+            headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ' + GITHUB_TOKEN, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: '📦 数据更新', content: btoa(c), sha: h.sha })
+        });
+        if (r.ok) { cloudCache = data; console.log('✅ 云端已同步'); return true; }
+    } catch (e) { console.warn('云端写入失败:', e.message); }
     return false;
 }
 
-// ========== 产品 ==========
-async function getProducts() {
-    var c = await fetchCloud();
-    if (c && c.products && c.products.length > 0) return c.products;
-    var l = localStorage.getItem('menu_products');
-    return l ? JSON.parse(l) : DEFAULT_PRODUCTS;
-}
+// ========== 产品/订单 CRUD ==========
+async function getProducts() { var c = await fetchCloud(); if (c && c.products && c.products.length > 0) return c.products; var l = localStorage.getItem('menu_products'); return l ? JSON.parse(l) : DEFAULT_PRODUCTS; }
+async function addProduct(p) { var ps = await getProducts(); p.id = ps.length > 0 ? Math.max.apply(null, ps.map(function(x){return x.id;})) + 1 : 1; ps.push(p); localStorage.setItem('menu_products', JSON.stringify(ps)); fetchCloud().then(function(c){if(c){c.products=ps;saveCloud(c);}}); return p; }
+async function updateProduct(id, u) { var ps = await getProducts(); var i = ps.findIndex(function(x){return x.id===id;}); if(i>=0){ps[i]=Object.assign({},ps[i],u);localStorage.setItem('menu_products',JSON.stringify(ps));} fetchCloud().then(function(c){if(c){c.products=ps;saveCloud(c);}}); }
+async function deleteProduct(id) { var ps = (await getProducts()).filter(function(x){return x.id!==id;}); localStorage.setItem('menu_products',JSON.stringify(ps)); fetchCloud().then(function(c){if(c){c.products=ps;saveCloud(c);}}); }
+async function initDefaultProducts() { var c = await fetchCloud(); if (!c || !c.products || c.products.length===0) { await saveCloud({ products: DEFAULT_PRODUCTS, orders: [] }); } }
 
-async function addProduct(p) {
-    var ps = await getProducts();
-    p.id = ps.length > 0 ? Math.max.apply(null, ps.map(function(x) { return x.id; })) + 1 : 1;
-    ps.push(p);
-    localStorage.setItem('menu_products', JSON.stringify(ps));
-    var c = await fetchCloud() || {};
-    c.products = ps;
-    await saveCloud(c);
-    return p;
-}
-
-async function updateProduct(id, u) {
-    var ps = await getProducts();
-    var i = ps.findIndex(function(x) { return x.id === id; });
-    if (i >= 0) { ps[i] = Object.assign({}, ps[i], u); localStorage.setItem('menu_products', JSON.stringify(ps)); }
-    var c = await fetchCloud() || {};
-    c.products = ps;
-    await saveCloud(c);
-}
-
-async function deleteProduct(id) {
-    var ps = (await getProducts()).filter(function(x) { return x.id !== id; });
-    localStorage.setItem('menu_products', JSON.stringify(ps));
-    var c = await fetchCloud() || {};
-    c.products = ps;
-    await saveCloud(c);
-}
-
-async function initDefaultProducts() {
-    var c = await fetchCloud();
-    if (!c || !c.products || c.products.length === 0) {
-        await saveCloud({ products: DEFAULT_PRODUCTS, orders: [] });
-        console.log('✅ 默认商品已写入云端');
-    }
-}
-
-// ========== 订单 ==========
-async function getOrders() {
-    var c = await fetchCloud();
-    if (c && c.orders) return c.orders.slice().reverse();
-    var l = localStorage.getItem('menu_orders');
-    return l ? JSON.parse(l) : [];
-}
-
+async function getOrders() { var c = await fetchCloud(); if (c && c.orders) return c.orders.slice().reverse(); var l = localStorage.getItem('menu_orders'); return l ? JSON.parse(l) : []; }
 async function addOrder(order) {
-    order.status = 'pending';
-    order.id = 'od_' + Date.now();
-    order._firestoreId = order.id;
-    order.time = new Date().toISOString();
-    order.timeDisplay = new Date().toLocaleString('zh-CN');
-    var c = await fetchCloud() || {};
-    c.orders = c.orders || [];
-    c.orders.push(order);
+    order.status = 'pending'; order.id = 'od_' + Date.now(); order._firestoreId = order.id;
+    order.time = new Date().toISOString(); order.timeDisplay = new Date().toLocaleString('zh-CN');
+    var c = await fetchCloud() || { products: DEFAULT_PRODUCTS, orders: [] };
+    c.orders = c.orders || []; c.orders.push(order);
     var ok = await saveCloud(c);
-    if (!ok) { var lo = JSON.parse(localStorage.getItem('menu_orders') || '[]'); lo.unshift(order); localStorage.setItem('menu_orders', JSON.stringify(lo)); }
+    if (!ok) { var lo = JSON.parse(localStorage.getItem('menu_orders')||'[]'); lo.unshift(order); localStorage.setItem('menu_orders',JSON.stringify(lo)); }
     return order;
 }
+async function markOrderDone(id) { var c = await fetchCloud(); if (c && c.orders) { var o = c.orders.find(function(x){return x.id===id||x._firestoreId===id;}); if(o){o.status='done';await saveCloud(c);return;} } var lo = JSON.parse(localStorage.getItem('menu_orders')||'[]'); var o = lo.find(function(x){return x.id===id||x._firestoreId===id;}); if(o){o.status='done';localStorage.setItem('menu_orders',JSON.stringify(lo));} }
+async function deleteOrder(id) { var c = await fetchCloud(); if (c && c.orders) { c.orders = c.orders.filter(function(x){return x.id!==id&&x._firestoreId!==id;}); await saveCloud(c); } var lo = JSON.parse(localStorage.getItem('menu_orders')||'[]').filter(function(x){return x.id!==id&&x._firestoreId!==id;}); localStorage.setItem('menu_orders',JSON.stringify(lo)); }
+async function getPendingCount() { var os = await getOrders(); var n = 0; os.forEach(function(o){if(o.status==='pending')n++;}); return n; }
+function onOrdersSnapshot(cb) { var t = setInterval(async function(){var os=await getOrders();cb(os);},3000); return function(){clearInterval(t);}; }
 
-async function markOrderDone(id) {
-    var c = await fetchCloud();
-    if (c && c.orders) { var o = c.orders.find(function(x) { return x.id === id || x._firestoreId === id; }); if (o) { o.status = 'done'; await saveCloud(c); return; } }
-    var lo = JSON.parse(localStorage.getItem('menu_orders') || '[]');
-    var o = lo.find(function(x) { return x.id === id || x._firestoreId === id; });
-    if (o) { o.status = 'done'; localStorage.setItem('menu_orders', JSON.stringify(lo)); }
-}
-
-async function deleteOrder(id) {
-    var c = await fetchCloud();
-    if (c && c.orders) { c.orders = c.orders.filter(function(x) { return x.id !== id && x._firestoreId !== id; }); await saveCloud(c); }
-    var lo = JSON.parse(localStorage.getItem('menu_orders') || '[]').filter(function(x) { return x.id !== id && x._firestoreId !== id; });
-    localStorage.setItem('menu_orders', JSON.stringify(lo));
-}
-
-async function getPendingCount() {
-    var os = await getOrders();
-    var n = 0;
-    os.forEach(function(o) { if (o.status === 'pending') n++; });
-    return n;
-}
-
-function onOrdersSnapshot(cb) {
-    var t = setInterval(async function() { var os = await getOrders(); cb(os); }, 3000);
-    return function() { clearInterval(t); };
-}
-
-// 启动
 initDefaultProducts();

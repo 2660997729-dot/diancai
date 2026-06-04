@@ -193,19 +193,19 @@
     {
       "items": [
         {
-          "productId": 3,
-          "name": "草莓蛋糕",
-          "price": "陪我看电影",
-          "emoji": "🍰",
+          "productId": 12,
+          "name": "巧克力",
+          "price": "一个亲亲",
+          "emoji": "🍫",
           "qty": 1
         }
       ],
       "note": "",
       "status": "pending",
-      "id": "od_1780561241422",
-      "_firestoreId": "od_1780561241422",
-      "time": "2026-06-04T08:20:41.422Z",
-      "timeDisplay": "2026/6/4 16:20:41"
+      "id": "od_1780561266088",
+      "_firestoreId": "od_1780561266088",
+      "time": "2026-06-04T08:21:06.088Z",
+      "timeDisplay": "2026/6/4 16:21:06"
     }
   ],
   "tk1": "ghp_cwNvByD8dfoktJej",

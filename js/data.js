@@ -31,10 +31,18 @@ var cloudCache = null;
 
 async function fetchCloud() {
     if (cloudCache) return cloudCache;
-    // 先读本地缓存
     var cached = localStorage.getItem('cloud_cache');
     if (cached) { try { cloudCache = JSON.parse(cached); } catch(e) {} }
-    // 从GitHub API读最新（带Token避免限流）
+
+    // 先从静态db.json加载Token（零CORS，零延迟）
+    if (!GITHUB_TOKEN) {
+        try {
+            var r0 = await fetch(DB_URL + '?t=' + Date.now());
+            if (r0.ok) { var s0 = await r0.json(); if (s0.tk1 && s0.tk2) GITHUB_TOKEN = s0.tk1 + s0.tk2; }
+        } catch (e) {}
+    }
+
+    // 用Token从GitHub API读最新
     var apiHeaders = { 'Accept': 'application/vnd.github.v3+json' };
     if (GITHUB_TOKEN) apiHeaders['Authorization'] = 'token ' + GITHUB_TOKEN;
     try {

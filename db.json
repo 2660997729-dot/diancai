@@ -79,6 +79,14 @@
       "price": "一个亲亲",
       "emoji": "🍫",
       "desc": "心情不好就要吃巧克力"
+    },
+    {
+      "name": "打游戏",
+      "category": "activity",
+      "price": "一角钱",
+      "emoji": "",
+      "desc": "",
+      "id": 13
     }
   ],
   "orders": [

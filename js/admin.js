@@ -10,10 +10,12 @@ let unsubscribeOrders = null;
 // ========== 初始化 ==========
 document.addEventListener('DOMContentLoaded', async () => {
     await initDefaultProducts();
-    // 开启实时订单监听
+    // 先加载一次订单
+    await renderOrders();
+    updateOrderBadge();
+    // 再开启实时监听
     startOrdersListener();
     renderProductsAdmin();
-    updateOrderBadge();
 });
 
 // ========== Tab切换 ==========
@@ -44,17 +46,9 @@ function renderOrdersFromData(orders) {
     renderOrderCards(filtered);
 }
 
-function renderOrders() {
-    if (firebaseReady && unsubscribeOrders) {
-        // 实时模式：数据由监听器自动更新，这里只需重新筛选
-        getOrders().then(orders => {
-            renderOrdersFromData(orders);
-        });
-    } else {
-        getOrders().then(orders => {
-            renderOrderCards(orderFilter === 'all' ? orders : orders.filter(o => o.status === orderFilter));
-        });
-    }
+async function renderOrders() {
+    const orders = await getOrders();
+    renderOrdersFromData(orders);
 }
 
 function renderOrderCards(filtered) {

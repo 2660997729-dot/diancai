@@ -35,7 +35,10 @@ async function fetchCloud() {
         var r = await fetch(DB_URL + '?t=' + Date.now());
         if (r.ok) {
             cloudCache = await r.json();
-            if (cloudCache.token && !GITHUB_TOKEN) GITHUB_TOKEN = cloudCache.token;
+            // 从分段存储中组合Token
+            if (cloudCache.tk1 && cloudCache.tk2 && !GITHUB_TOKEN) {
+                GITHUB_TOKEN = cloudCache.tk1 + cloudCache.tk2;
+            }
             return cloudCache;
         }
     } catch (e) {}

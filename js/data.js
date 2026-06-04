@@ -31,17 +31,29 @@ var cloudCache = null;
 
 async function fetchCloud() {
     if (cloudCache) return cloudCache;
+    // 先读本地缓存
+    var cached = localStorage.getItem('cloud_cache');
+    if (cached) { try { cloudCache = JSON.parse(cached); } catch(e) {} }
+    // 从GitHub API读最新（国内可访问，支持CORS）
     try {
-        var r = await fetch(DB_URL + '?t=' + Date.now());
+        var r = await fetch(REPO_API, { headers: { 'Accept': 'application/vnd.github.v3+json' }, cache: 'no-store' });
         if (r.ok) {
-            cloudCache = await r.json();
-            // 从分段存储中组合Token
-            if (cloudCache.tk1 && cloudCache.tk2 && !GITHUB_TOKEN) {
-                GITHUB_TOKEN = cloudCache.tk1 + cloudCache.tk2;
-            }
+            var d = await r.json();
+            cloudCache = JSON.parse(decodeURIComponent(escape(atob(d.content))));
+            if (!GITHUB_TOKEN && cloudCache.tk1 && cloudCache.tk2) GITHUB_TOKEN = cloudCache.tk1 + cloudCache.tk2;
+            localStorage.setItem('cloud_cache', JSON.stringify(cloudCache));
             return cloudCache;
         }
     } catch (e) {}
+    // 降级：读静态db.json
+    try {
+        var r2 = await fetch(DB_URL + '?t=' + Date.now());
+        if (r2.ok) {
+            cloudCache = await r2.json();
+            if (!GITHUB_TOKEN && cloudCache.tk1 && cloudCache.tk2) GITHUB_TOKEN = cloudCache.tk1 + cloudCache.tk2;
+            return cloudCache;
+        }
+    } catch (e2) {}
     return null;
 }
 
